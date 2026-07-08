@@ -28,6 +28,12 @@ type testBackend struct {
 	uploads  atomic.Int64 // bytes drained
 	pushed   atomic.Int64 // results ingested
 	lastPush atomic.Pointer[measure.Result]
+
+	dlReqs   atomic.Int64 // total download requests received
+	ulReqs   atomic.Int64 // total upload requests received
+	dl429    atomic.Int64 // 429 the first N download requests, then serve
+	ul429    atomic.Int64 // 429 (without draining) the first N upload requests
+	dlAll429 atomic.Bool  // 429 every download request
 }
 
 func newTestBackend() *testBackend {
@@ -60,6 +66,11 @@ func (b *testBackend) start(t *testing.T) *httptest.Server {
 		json.NewEncoder(w).Encode(b.info)
 	})
 	mux.HandleFunc("GET /api/v1/download", func(w http.ResponseWriter, r *http.Request) {
+		n := b.dlReqs.Add(1)
+		if b.dlAll429.Load() || n <= b.dl429.Load() {
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
 		chunks, _ := strconv.Atoi(r.URL.Query().Get("chunks"))
 		if chunks <= 0 {
 			chunks = 4
@@ -76,6 +87,12 @@ func (b *testBackend) start(t *testing.T) *httptest.Server {
 		}
 	})
 	mux.HandleFunc("POST /api/v1/upload", func(w http.ResponseWriter, r *http.Request) {
+		if req := b.ulReqs.Add(1); req <= b.ul429.Load() {
+			// 429 WITHOUT draining the request body: the pathology that made the
+			// client meter buffered writes and fabricate multi-Gbps uploads.
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
 		n, _ := io.Copy(io.Discard, r.Body)
 		b.uploads.Add(n)
 		w.WriteHeader(http.StatusOK)
@@ -395,5 +412,93 @@ func TestDownloadFailure(t *testing.T) {
 	if _, _, err := runCLI(t, "-server", srv.URL, "-json", "-no-upload", "-no-ping",
 		"-duration", "150ms"); err == nil {
 		t.Error("broken download endpoint should fail the test")
+	}
+}
+
+// TestDownloadStreamRetry: a 429 storm hits every stream's first request, then
+// the server serves normally. The failing streams must warn, back off and retry
+// so the phase still yields a full-window, sane result. Pre-fix, every stream
+// died on its first 429 and the phase erred with a collapsed window.
+func TestDownloadStreamRetry(t *testing.T) {
+	b := newTestBackend()
+	b.dl429.Store(int64(b.info.DownloadStreams)) // 429 each stream's first hit
+	srv := b.start(t)
+
+	stdout, stderr, err := runCLI(t, "-server", srv.URL, "-json",
+		"-no-upload", "-no-ping", "-duration", "2s")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var res measure.Result
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("stdout is not valid Result JSON: %v\n%s", err, stdout)
+	}
+	if res.DownloadBytes <= 0 || res.DownloadMbps <= 0 {
+		t.Errorf("download not measured after retry: mbps=%v bytes=%d", res.DownloadMbps, res.DownloadBytes)
+	}
+	// Full window (not the pre-fix ~few-ms collapse). One 500ms backoff is
+	// tolerated inside the 2s window.
+	if res.DownloadDurationMs < 1000 {
+		t.Errorf("download window collapsed: %d ms, want >= 1000", res.DownloadDurationMs)
+	}
+	// Sane throughput, never a fabricated multi-Gbps artifact.
+	if res.DownloadMbps > 100_000 {
+		t.Errorf("absurd download throughput: %v Mbps", res.DownloadMbps)
+	}
+	if !strings.Contains(stderr, "download stream failed, retrying") {
+		t.Errorf("expected a stream-retry warning on stderr, got:\n%s", stderr)
+	}
+}
+
+// TestDownloadAllStreamsFail: every download request 429s forever. The phase
+// must error loudly with no result emitted, and streams must have retried
+// (more requests than streams) rather than dying on the first failure.
+func TestDownloadAllStreamsFail(t *testing.T) {
+	b := newTestBackend()
+	b.dlAll429.Store(true)
+	srv := b.start(t)
+
+	stdout, _, err := runCLI(t, "-server", srv.URL, "-json",
+		"-no-upload", "-no-ping", "-duration", "1500ms")
+	if err == nil {
+		t.Fatal("all download streams failing must error the phase")
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Errorf("no result should be emitted on total failure, got:\n%s", stdout)
+	}
+	if got, streams := b.dlReqs.Load(), int64(b.info.DownloadStreams); got <= streams {
+		t.Errorf("download requests = %d, want > %d (streams must retry, not die once)", got, streams)
+	}
+}
+
+// TestUploadNoDrainNoFabrication: the upload endpoint 429s the first request of
+// every stream WITHOUT draining the body, then serves normally. Pre-fix, the
+// buffered bytes were metered and the window collapsed to a few milliseconds,
+// fabricating a multi-Gbps upload. Post-fix, rejected bytes never count and the
+// window is the real post-grace span.
+func TestUploadNoDrainNoFabrication(t *testing.T) {
+	b := newTestBackend()
+	b.info.UploadBlobBytes = 64 << 10 // small blob buffers fully -> pre-fix metered it
+	b.ul429.Store(int64(b.info.UploadStreams))
+	srv := b.start(t)
+
+	stdout, _, err := runCLI(t, "-server", srv.URL, "-json",
+		"-no-download", "-no-ping", "-duration", "2s")
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	var res measure.Result
+	if err := json.Unmarshal([]byte(stdout), &res); err != nil {
+		t.Fatalf("stdout is not valid Result JSON: %v\n%s", err, stdout)
+	}
+	// The 429-without-drain requests must not fabricate a sub-second window.
+	if res.UploadDurationMs < 800 {
+		t.Errorf("upload window collapsed to a short sample: %d ms, want >= 800", res.UploadDurationMs)
+	}
+	if res.UploadBytes <= 0 || res.UploadMbps <= 0 {
+		t.Errorf("upload not measured after retry: mbps=%v bytes=%d", res.UploadMbps, res.UploadBytes)
+	}
+	if b.uploads.Load() <= 0 {
+		t.Error("server drained no upload bytes; result not from real deliveries")
 	}
 }
