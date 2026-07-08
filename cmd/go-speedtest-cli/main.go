@@ -31,6 +31,11 @@ import (
 
 const readBufSize = 128 << 10 // 128 KiB read buffer for the download path
 
+// retryBackoff is how long a stream waits after a failed request (429, reset,
+// EOF) before retrying, so a transient failure does not permanently thin the
+// stream pool for the rest of the measurement window.
+const retryBackoff = 500 * time.Millisecond
+
 // serverInfo mirrors the JSON served at GET /api/v1/info (same field names as
 // the webui.UIConfig contract). Zero-valued fields fall back to the canonical
 // measure defaults.
@@ -118,7 +123,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	log := zerolog.New(zerolog.ConsoleWriter{Out: stderr, TimeFormat: time.TimeOnly}).
+	// SyncWriter guards the writer with a mutex so the per-stream retry warnings
+	// emitted concurrently from parallel download/upload goroutines do not race.
+	log := zerolog.New(zerolog.SyncWriter(zerolog.ConsoleWriter{Out: stderr, TimeFormat: time.TimeOnly})).
 		Level(zerolog.WarnLevel).With().Timestamp().Logger()
 
 	if *serverURL == "" {
@@ -179,7 +186,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		res.SetPing(ps)
 	}
 	if opt.doDownload {
-		m, err := runDownload(client, opt)
+		m, err := runDownload(client, opt, log)
 		if err != nil {
 			return fmt.Errorf("download: %w", err)
 		}
@@ -187,7 +194,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		res.StreamsDownload = opt.streamsDL
 	}
 	if opt.doUpload {
-		m, err := runUpload(client, opt)
+		m, err := runUpload(client, opt, log)
 		if err != nil {
 			return fmt.Errorf("upload: %w", err)
 		}
@@ -432,7 +439,7 @@ func (l *lockedMeter) mbps() float64 {
 	return l.m.Mbps()
 }
 
-func runDownload(c *http.Client, opt *options) (*measure.ThroughputMeter, error) {
+func runDownload(c *http.Client, opt *options, log zerolog.Logger) (*measure.ThroughputMeter, error) {
 	lm := &lockedMeter{m: measure.NewThroughputMeter(opt.overhead, opt.graceDownload)}
 	// The measured window is opt.duration after the grace reset, so the wall
 	// deadline is grace + duration (librespeed counts test time post-grace).
@@ -447,32 +454,37 @@ func runDownload(c *http.Client, opt *options) (*measure.ThroughputMeter, error)
 	q.Set("chunks", strconv.Itoa(opt.chunks))
 	u.RawQuery = q.Encode()
 
+	// Each stream runs for the whole window. A failed request (429, reset, EOF)
+	// only affects that stream: it warns, backs off and retries. The phase as a
+	// whole fails only if no stream ever transferred any bytes.
 	var wg sync.WaitGroup
-	errs := make(chan error, opt.streamsDL)
 	for i := 0; i < opt.streamsDL; i++ {
 		wg.Add(1)
-		go func() {
+		go func(id int) {
 			defer wg.Done()
 			buf := make([]byte, readBufSize)
 			for ctx.Err() == nil {
 				if err := downloadOnce(ctx, c, u.String(), buf, lm); err != nil {
-					if ctx.Err() == nil {
-						errs <- err
+					if ctx.Err() != nil {
+						return
 					}
-					return
+					log.Warn().Err(err).Int("stream", id).
+						Msg("download stream failed, retrying after backoff")
+					if !sleepCtx(ctx, retryBackoff) {
+						return
+					}
 				}
 			}
-		}()
+		}(i)
 	}
 	wg.Wait()
 	stop()
-	close(errs)
+
+	lm.m.Stop(time.Now())
 	if lm.m.Bytes() == 0 {
-		if err := <-errs; err != nil {
-			return nil, err
-		}
-		return nil, errors.New("no data transferred in the measurement window")
+		return nil, errors.New("all download streams failed; no data transferred in the measurement window")
 	}
+	warnIfTruncated(log, "download", opt.duration, lm.m.Elapsed())
 	return lm.m, nil
 }
 
@@ -504,23 +516,48 @@ func downloadOnce(ctx context.Context, c *http.Client, u string, buf []byte, lm 
 	}
 }
 
+// sleepCtx waits for d or until ctx is cancelled. It returns true if the full
+// duration elapsed, false if ctx ended first.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// warnIfTruncated warns on stderr when the achieved measurement window fell
+// below 80% of what was requested, so a short/thin sample is not silently
+// reported as a full-window throughput figure.
+func warnIfTruncated(log zerolog.Logger, phase string, want, got time.Duration) {
+	if got < time.Duration(float64(want)*0.8) {
+		log.Warn().Str("phase", phase).
+			Dur("requested", want).Dur("achieved", got).
+			Msg("measurement window truncated; throughput derived from a short sample")
+	}
+}
+
 // --- upload phase ---
 
-// countingReader reports bytes as they are handed to the HTTP transport.
+// countingReader tallies bytes handed to the HTTP transport for a single
+// request. The tally is committed to the shared meter only after a 200
+// response, so bytes pushed into socket buffers for a request the peer rejects
+// (e.g. a 429 that never drains the body) never contribute throughput.
 type countingReader struct {
-	r   io.Reader
-	add func(int64)
+	r io.Reader
+	n int64
 }
 
 func (cr *countingReader) Read(p []byte) (int, error) {
 	n, err := cr.r.Read(p)
-	if n > 0 {
-		cr.add(int64(n))
-	}
+	cr.n += int64(n)
 	return n, err
 }
 
-func runUpload(c *http.Client, opt *options) (*measure.ThroughputMeter, error) {
+func runUpload(c *http.Client, opt *options, log zerolog.Logger) (*measure.ThroughputMeter, error) {
 	// One incompressible random blob, generated once and reused by every
 	// stream. math/rand/v2 is fine client-side: incompressibility is the goal.
 	blob := make([]byte, opt.blobBytes)
@@ -539,37 +576,41 @@ func runUpload(c *http.Client, opt *options) (*measure.ThroughputMeter, error) {
 	stop := startProgress(opt, "upload", total, lm.mbps)
 	u := opt.serverURL.JoinPath(opt.epUpload).String()
 
+	// Each stream runs for the whole window; a failed request warns, backs off
+	// and retries. The phase fails only if no stream ever delivered any bytes.
 	var wg sync.WaitGroup
-	errs := make(chan error, opt.streamsUL)
 	for i := 0; i < opt.streamsUL; i++ {
 		wg.Add(1)
-		go func() {
+		go func(id int) {
 			defer wg.Done()
 			for ctx.Err() == nil {
 				if err := uploadOnce(ctx, c, u, blob, lm); err != nil {
-					if ctx.Err() == nil {
-						errs <- err
+					if ctx.Err() != nil {
+						return
 					}
-					return
+					log.Warn().Err(err).Int("stream", id).
+						Msg("upload stream failed, retrying after backoff")
+					if !sleepCtx(ctx, retryBackoff) {
+						return
+					}
 				}
 			}
-		}()
+		}(i)
 	}
 	wg.Wait()
 	stop()
-	close(errs)
+
+	lm.m.Stop(time.Now())
 	if lm.m.Bytes() == 0 {
-		if err := <-errs; err != nil {
-			return nil, err
-		}
-		return nil, errors.New("no data transferred in the measurement window")
+		return nil, errors.New("all upload streams failed; no data transferred in the measurement window")
 	}
+	warnIfTruncated(log, "upload", opt.duration, lm.m.Elapsed())
 	return lm.m, nil
 }
 
 func uploadOnce(ctx context.Context, c *http.Client, u string, blob []byte, lm *lockedMeter) error {
-	body := &countingReader{r: bytes.NewReader(blob), add: lm.add}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, body)
+	cr := &countingReader{r: bytes.NewReader(blob)}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, cr)
 	if err != nil {
 		return err
 	}
@@ -584,6 +625,8 @@ func uploadOnce(ctx context.Context, c *http.Client, u string, blob []byte, lm *
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("upload endpoint returned %s", resp.Status)
 	}
+	// Only a fully-accepted (200) upload contributes bytes.
+	lm.add(cr.n)
 	return nil
 }
 

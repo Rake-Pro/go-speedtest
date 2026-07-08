@@ -170,6 +170,22 @@ func (m *ThroughputMeter) Elapsed() time.Duration {
 	return m.elapsed
 }
 
+// Stop finalizes the measurement window at now, extending elapsed to the full
+// post-grace wall-clock span (grace-end .. now). This makes the reported
+// duration reflect the intended measurement window rather than the timestamp of
+// the last recorded sample, which would otherwise collapse to a tiny value if
+// streams stop transferring early (e.g. all peers return 429). It is a no-op
+// before the grace period has elapsed (there is no valid window yet) or if the
+// meter was never started.
+func (m *ThroughputMeter) Stop(now time.Time) {
+	if m.started.IsZero() || !m.graceEnded {
+		return
+	}
+	if d := now.Sub(m.baseTime); d > m.elapsed {
+		m.elapsed = d
+	}
+}
+
 // JitterEWMA computes jitter as an asymmetric exponentially weighted moving
 // average of successive inter-arrival / RTT deltas:
 //
