@@ -1,0 +1,27 @@
+# Binaries
+/go-speedtest
+/go-speedtest-cli
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test / coverage
+*.test
+*.out
+coverage.*
+
+# SQLite telemetry
+*.db
+*.db-shm
+*.db-wal
+
+# Go workspace
+go.work
+go.work.sum
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
