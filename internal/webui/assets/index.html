@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>go-speedtest</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="dot" aria-hidden="true"></span>
+        <h1>go-speedtest</h1>
+      </div>
+      <div class="server" id="server-name">&nbsp;</div>
+    </header>
+
+    <section class="stage">
+      <div class="gauge" id="gauge">
+        <svg viewBox="0 0 200 200" class="gauge-svg" aria-hidden="true">
+          <circle class="gauge-track" cx="100" cy="100" r="88"></circle>
+          <circle class="gauge-fill" id="gauge-fill" cx="100" cy="100" r="88"></circle>
+        </svg>
+        <div class="gauge-center">
+          <div class="gauge-phase" id="gauge-phase">Ready</div>
+          <div class="gauge-value" id="gauge-value">0</div>
+          <div class="gauge-unit" id="gauge-unit">Mbps</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="metrics" id="results-card">
+      <div class="metric" data-metric="download">
+        <div class="metric-icon">&#9660;</div>
+        <div class="metric-body">
+          <div class="metric-label">Download</div>
+          <div class="metric-value"><span id="m-download">--</span> <em>Mbps</em></div>
+        </div>
+      </div>
+      <div class="metric" data-metric="upload">
+        <div class="metric-icon">&#9650;</div>
+        <div class="metric-body">
+          <div class="metric-label">Upload</div>
+          <div class="metric-value"><span id="m-upload">--</span> <em>Mbps</em></div>
+        </div>
+      </div>
+      <div class="metric" data-metric="ping">
+        <div class="metric-icon">&#8646;</div>
+        <div class="metric-body">
+          <div class="metric-label">Ping</div>
+          <div class="metric-value"><span id="m-ping">--</span> <em>ms</em></div>
+        </div>
+      </div>
+      <div class="metric" data-metric="jitter">
+        <div class="metric-icon">&#8767;</div>
+        <div class="metric-body">
+          <div class="metric-label">Jitter</div>
+          <div class="metric-value"><span id="m-jitter">--</span> <em>ms</em></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <button id="start-btn" class="btn primary" type="button">Start</button>
+      <button id="save-btn" class="btn ghost" type="button" hidden>Save image</button>
+    </section>
+
+    <footer class="foot">
+      <span class="ip">Your IP: <span id="client-ip">&hellip;</span></span>
+      <span class="status" id="status"></span>
+    </footer>
+  </main>
+
+  <canvas id="share-canvas" width="1000" height="560" hidden></canvas>
+  <script src="speedtest.js"></script>
+</body>
+</html>
