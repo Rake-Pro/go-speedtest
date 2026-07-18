@@ -91,7 +91,7 @@ jobs:
       - name: Run Trivy scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ needs.build.outputs.version }}
+          image-ref: ghcr.io/rake-pro/go-speedtest:${{ needs.build.outputs.version }}
           exit-code: '1'
           severity: CRITICAL
           ignore-unfixed: true
