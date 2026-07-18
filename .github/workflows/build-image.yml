@@ -13,7 +13,7 @@ on:
       - ".gitignore"
   # PRs from main -> prod build WITHOUT pushing, to validate the image before merge.
   pull_request:
-    branches: [prod]
+    branches: [prod, main]
     paths-ignore:
       - "**.md"
       - "docs/**"
