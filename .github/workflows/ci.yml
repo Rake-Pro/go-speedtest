@@ -1,20 +1,12 @@
 name: CI
 
+# No paths filters: the "build" check is required on prod promotion PRs, so it
+# must exist on every main SHA - a filtered-out push would block promotion.
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "deploy/**"
-      - ".gitignore"
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "deploy/**"
-      - ".gitignore"
   workflow_dispatch: {}
 
 permissions:
