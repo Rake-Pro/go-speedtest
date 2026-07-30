@@ -43,6 +43,7 @@ func run(args []string) error {
 	}
 
 	setupLogging(cfg)
+	warnIfUnguarded(cfg)
 
 	if err := payload.Init(); err != nil {
 		return err
@@ -111,9 +112,27 @@ func newStore(cfg *config.Config) (telemetry.Store, error) {
 	}
 }
 
+// newLimiter builds the admission limiter from the effective limits rather than
+// from the mode name. Gating on cfg.Mode alone silently dropped an explicit
+// -per-ip-concurrency / -rate-limit-burst override in lan mode, even though the
+// config layer preserves such overrides. Both zero => nothing to enforce, so
+// use the no-op limiter (the real one would admit everything anyway).
 func newLimiter(cfg *config.Config) ratelimit.Limiter {
-	if cfg.Mode == config.ModeInternet {
+	if cfg.PerIPConcurrency > 0 || cfg.RateLimitBurst > 0 {
 		return ratelimit.New(cfg.PerIPConcurrency, cfg.RateLimitPerSec, cfg.RateLimitBurst)
 	}
 	return ratelimit.NewNoop()
+}
+
+// warnIfUnguarded logs a startup warning when the effective config leaves every
+// abuse guardrail disabled. The lan profile zeroes them by design, so this makes
+// a missing -mode internet visible in the log instead of silent.
+func warnIfUnguarded(cfg *config.Config) {
+	if cfg.PerIPConcurrency > 0 || cfg.ChunkCap > 0 || cfg.MaxUploadBytes > 0 ||
+		cfg.RateLimitBurst > 0 || cfg.ReadDeadline > 0 {
+		return
+	}
+	log.Warn().
+		Str("mode", cfg.Mode).
+		Msg("no abuse guardrails active: per-IP concurrency, chunk cap, upload cap, rate limit and read deadline are all disabled; use -mode internet, or set the individual limits, if this server is reachable beyond a trusted LAN")
 }
