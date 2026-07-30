@@ -429,6 +429,12 @@ func (s *server) handleResultsIngest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
+// handleResultGet intentionally does NOT call authorized(). Retrieval by id is
+// the share path: a result URL is meant to stay openable by whoever it was
+// handed to, so gating it on the API token would break sharing. The id is a
+// 128-bit CSPRNG value (telemetry.newID) and is therefore unguessable, and the
+// two mutating/enumerating siblings (results ingest, stats list) do enforce the
+// token. See the API table in DESIGN.md, which marks auth only on those two.
 func (s *server) handleResultGet(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	res, err := s.store.Get(r.Context(), id)
