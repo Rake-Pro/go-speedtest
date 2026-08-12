@@ -13,7 +13,7 @@ RUN go build -trimpath -ldflags "-s -w" -o /out/go-speedtest ./cmd/go-speedtest 
     go build -trimpath -ldflags "-s -w" -o /out/go-speedtest-cli ./cmd/go-speedtest-cli
 
 # --- runtime stage ---
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /out/go-speedtest /go-speedtest
 COPY --from=build /out/go-speedtest-cli /go-speedtest-cli
 EXPOSE 8080
