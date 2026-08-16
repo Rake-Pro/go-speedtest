@@ -9,9 +9,7 @@ on:
     tags: ["v*"]
   workflow_dispatch: {}
 
-permissions:
-  contents: write
-  packages: write
+permissions: {}
 
 concurrency:
   group: release
@@ -24,6 +22,9 @@ env:
 jobs:
   version:
     if: github.ref_type == 'branch'
+    permissions:
+      contents: write # push the release tag
+      pull-requests: read # PR labels choose the bump level
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.next.outputs.tag }}
@@ -70,6 +71,9 @@ jobs:
 
   build:
     needs: [version]
+    permissions:
+      contents: read
+      packages: write
     # Runs for a freshly minted tag (prod merge) or a manually pushed v* tag.
     if: always() && (needs.version.outputs.tag != '' || github.ref_type == 'tag')
     runs-on: ubuntu-latest
@@ -124,6 +128,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   trivy-scan:
+    permissions:
+      packages: read
     name: Trivy scan
     needs: [build]
     if: always() && needs.build.result == 'success'
