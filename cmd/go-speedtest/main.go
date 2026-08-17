@@ -33,9 +33,7 @@ func main() {
 	}
 }
 
-// run parses configuration, wires every component, and serves. Logic inside
-// each component is stubbed for wave-2; this wiring compiles and is the shape
-// AGENT-CORE fills in.
+// run parses configuration, wires every component, and serves.
 func run(args []string) error {
 	cfg, err := config.Load(args)
 	if err != nil {

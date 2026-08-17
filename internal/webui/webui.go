@@ -1,7 +1,7 @@
 // Package webui serves the embedded vanilla-JS frontend and the runtime
 // /config.json document that parameterizes it. All assets are compiled into the
-// binary via go:embed. AGENT-UI owns this package; the UIConfig field names
-// below are the frozen contract between the server config and the browser.
+// binary via go:embed. The UIConfig field names below are the contract
+// between the server config and the browser.
 package webui
 
 import (
@@ -46,8 +46,8 @@ type Endpoints struct {
 }
 
 // UIConfig is the JSON shape served at GET /config.json. It surfaces the
-// server-resolved measurement parameters to the browser client. Field names are
-// frozen; AGENT-UI must consume exactly these.
+// server-resolved measurement parameters to the browser client. Field names
+// are a stable contract with the browser client code.
 type UIConfig struct {
 	ServerName      string    `json:"server_name"`
 	TestDurationMs  int64     `json:"test_duration_ms"`
