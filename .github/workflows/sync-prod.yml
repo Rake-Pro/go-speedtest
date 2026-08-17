@@ -4,9 +4,9 @@ on:
   push:
     branches: [main]
   # Fallback: catches any push event GitHub suppressed (bot-token merges) or a
-  # failed earlier run. Worst case a promotion PR shows up a few hours late.
+  # failed earlier run. Worst case a promotion PR shows up a day late.
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "17 4 * * *"
   workflow_dispatch: {}
 
 permissions:

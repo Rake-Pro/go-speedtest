@@ -2,7 +2,7 @@
 
 Self-hosted speedtest. A single Go binary serves an embedded vanilla-JS UI plus
 a native measurement API; a companion CLI binary runs the same test from a
-terminal. Native wire protocol — the API is native and defined here.
+terminal. The API is native and defined here.
 
 - Module: `github.com/Rake-Pro/go-speedtest`
 - Go: 1.26
@@ -192,23 +192,22 @@ Field names are the frozen contract between server config and the browser.
 | `websocket_ping` | bool | whether to prefer the WS echo ping |
 | `endpoints` | object | `{download, upload, ping, ip, ws, results}` paths |
 
-## Package boundaries and ownership (frozen contracts)
+## Package boundaries
 
-Exported types and function signatures defined at scaffold time are FROZEN. If
-an implementer believes a contract is wrong, report it back instead of changing
-it. `go.mod` / `go.sum` are frozen for all agents.
+Exported types and function signatures below are stable API within this
+repo — changes to them are breaking changes.
 
-- **AGENT-CORE** — owns `internal/config`, `internal/payload`,
-  `internal/handlers`, `internal/server`, `internal/clientip`,
-  `cmd/go-speedtest`. May adjust wiring in `main.go`. Must not touch other
-  packages' files.
-- **AGENT-UI** — owns `internal/webui/**` only (including the `/config.json`
-  shape). The JSON field names it needs are the `webui.UIConfig` struct above.
-- **AGENT-CLI** — owns `internal/measure`, `cmd/go-speedtest-cli` only.
-- **AGENT-INFRA** — owns `internal/telemetry`, `internal/ratelimit`,
-  `internal/metrics` only.
+- `internal/config`, `internal/payload`, `internal/handlers`,
+  `internal/server`, `internal/clientip`, `cmd/go-speedtest` — server core
+  and wiring.
+- `internal/webui/**` — embedded UI, including the `/config.json` shape
+  (the `webui.UIConfig` struct below).
+- `internal/measure`, `cmd/go-speedtest-cli` — shared measurement math and
+  the CLI.
+- `internal/telemetry`, `internal/ratelimit`, `internal/metrics` — storage,
+  rate limiting, and metrics.
 
-### Frozen signatures (scaffolded)
+### Stable signatures
 
 - `config.Load(args []string) (*config.Config, error)`; `config.Defaults() *config.Config`
 - `payload.Init() error`; `payload.Buffer() []byte`; `payload.ChunkSize`

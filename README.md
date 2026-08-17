@@ -72,3 +72,7 @@ Flags may also be set via environment variables with the `GOSPEEDTEST_` prefix
 | GET  | `/api/v1/stats` | Recent results (auth if token set) |
 | GET  | `/healthz` `/readyz` | Probes |
 | GET  | `/metrics` | Prometheus text |
+
+## License
+
+MIT - see [LICENSE](LICENSE).
