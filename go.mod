@@ -5,7 +5,7 @@ go 1.26
 require (
 	github.com/rs/zerolog v1.35.1
 	golang.org/x/net v0.58.0
-	modernc.org/sqlite v1.56.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (
