@@ -1,12 +1,12 @@
 name: CI
 
-# No paths filters: the "build" check is required on prod promotion PRs, so it
-# must exist on every main SHA - a filtered-out push would block promotion.
+# No paths filters: the "build" check is required on dev -> main promotion PRs, so it
+# must exist on every dev SHA - a filtered-out push would block promotion.
 on:
   push:
-    branches: [main]
+    branches: [dev]
   pull_request:
-    branches: [main]
+    branches: [dev]
   workflow_dispatch: {}
 
 permissions:
@@ -27,7 +27,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       # Validation only: the image is built but never pushed. Runs on every push
-      # to main so the check lands on the SHA the main -> prod PR points at.
+      # to dev so the check lands on the SHA the dev -> main PR points at.
       - name: Build (no push)
         uses: docker/build-push-action@v7
         with:
