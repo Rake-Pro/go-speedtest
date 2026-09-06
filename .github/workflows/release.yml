@@ -1,11 +1,11 @@
 name: Release
 
 on:
-  # Normal path: a promotion PR merges into prod; this run mints the next
+  # Normal path: a promotion PR merges into main; this run mints the next
   # semver tag and builds from it, all in one workflow (a tag pushed with
   # GITHUB_TOKEN cannot trigger another workflow, so nothing is chained).
   push:
-    branches: [prod]
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch: {}
 
@@ -74,7 +74,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # Runs for a freshly minted tag (prod merge) or a manually pushed v* tag.
+    # Runs for a freshly minted tag (main merge) or a manually pushed v* tag.
     if: always() && (needs.version.outputs.tag != '' || github.ref_type == 'tag')
     runs-on: ubuntu-latest
     outputs:
