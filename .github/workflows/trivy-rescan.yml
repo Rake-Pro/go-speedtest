@@ -1,0 +1,51 @@
+name: Trivy rescan
+
+# Rescans the CURRENT released image on a schedule so CVEs disclosed after the
+# release (base-image packages, Go stdlib, vendored modules) surface without
+# waiting for the next code push. Fails the run on CRITICAL/HIGH so GitHub
+# emails the failure. Does not build or push anything.
+on:
+  schedule:
+    - cron: '40 5 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: trivy-rescan
+  cancel-in-progress: false
+
+jobs:
+  rescan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+
+      - name: Resolve current release tag
+        id: tag
+        run: |
+          set -euo pipefail
+          latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          [ -n "$latest" ] || { echo "no v* tag; nothing to scan" >&2; exit 1; }
+          echo "version=${latest#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trivy scan (released image)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/rake-pro/go-speedtest:${{ steps.tag.outputs.version }}
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
