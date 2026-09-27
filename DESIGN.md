@@ -1,4 +1,4 @@
-# go-speedtest — Design
+# go-speedtest: Design
 
 Self-hosted speedtest. A single Go binary serves an embedded vanilla-JS UI plus
 a native measurement API; a companion CLI binary runs the same test from a
@@ -12,9 +12,9 @@ terminal. The API is native and defined here.
 
 Exactly these three third-party modules are allowed, and NO others:
 
-- `github.com/rs/zerolog` — logging
-- `modernc.org/sqlite` — pure-Go SQLite driver (telemetry backend)
-- `golang.org/x/net` — used for `http2`, `http2/h2c`, `websocket`
+- `github.com/rs/zerolog`: logging
+- `modernc.org/sqlite`: pure-Go SQLite driver (telemetry backend)
+- `golang.org/x/net`: used for `http2`, `http2/h2c`, `websocket`
 
 `go.mod` / `go.sum` are frozen. Implementers must not add, remove, or bump
 dependencies. If a contract genuinely requires another dependency, report back;
@@ -27,9 +27,9 @@ and the CLI both implement the same procedure.
 
 - Test shape: 15s time-based tests (configurable).
 - Download: server streams N x 1 MiB incompressible random chunks. Client uses
-  6 parallel streams by default (configurable 3–12).
+  6 parallel streams by default (configurable 3-12).
 - Upload: client generates a ~20 MB random blob and POSTs it over parallel
-  streams (default 3, configurable 3–12). The server MUST fully drain the
+  streams (default 3, configurable 3-12). The server MUST fully drain the
   upload body before responding `200`.
 - Grace periods: 1.5s (download) / 3s (upload). After the grace period the
   byte and time counters RESET, to discard TCP slow-start.
@@ -99,8 +99,8 @@ zerolog, JSON to stdout, global logger. Level via `-log-level`.
 
 `internal/telemetry` `Store` interface. Backends:
 
-- `none` (default) — discards writes.
-- `sqlite` — `modernc.org/sqlite`, pure Go, no cgo.
+- `none` (default): discards writes.
+- `sqlite`: `modernc.org/sqlite`, pure Go, no cgo.
 
 Flags: `-telemetry none|sqlite`, `-telemetry-path <file>`.
 
@@ -146,7 +146,7 @@ Client-side canvas in the browser. The server has NO image code.
 
 Note: `GET /api/v1/download` default is 4 chunks. `internal/config` also carries
 a `DownloadStreams` default of 6 (parallel client streams); these are distinct
-knobs — chunks-per-request vs number of parallel streams.
+knobs: chunks-per-request vs number of parallel streams.
 
 ## Result JSON schema (`measure.Result`)
 
@@ -182,8 +182,8 @@ Field names are the frozen contract between server config and the browser.
 | `test_duration_ms` | int64 | |
 | `grace_download_ms` | int64 | |
 | `grace_upload_ms` | int64 | |
-| `download_streams` | int | parallel download streams (3–12) |
-| `upload_streams` | int | parallel upload streams (3–12) |
+| `download_streams` | int | parallel download streams (3-12) |
+| `upload_streams` | int | parallel upload streams (3-12) |
 | `overhead_factor` | float64 | |
 | `chunk_size_bytes` | int64 | 1 MiB |
 | `upload_blob_bytes` | int64 | ~20 MB client blob |
@@ -195,16 +195,16 @@ Field names are the frozen contract between server config and the browser.
 ## Package boundaries
 
 Exported types and function signatures below are stable API within this
-repo — changes to them are breaking changes.
+repo: changes to them are breaking changes.
 
 - `internal/config`, `internal/payload`, `internal/handlers`,
-  `internal/server`, `internal/clientip`, `cmd/go-speedtest` — server core
+  `internal/server`, `internal/clientip`, `cmd/go-speedtest`: server core
   and wiring.
-- `internal/webui/**` — embedded UI, including the `/config.json` shape
+- `internal/webui/**`: embedded UI, including the `/config.json` shape
   (the `webui.UIConfig` struct below).
-- `internal/measure`, `cmd/go-speedtest-cli` — shared measurement math and
+- `internal/measure`, `cmd/go-speedtest-cli`: shared measurement math and
   the CLI.
-- `internal/telemetry`, `internal/ratelimit`, `internal/metrics` — storage,
+- `internal/telemetry`, `internal/ratelimit`, `internal/metrics`: storage,
   rate limiting, and metrics.
 
 ### Stable signatures

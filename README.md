@@ -1,30 +1,29 @@
 # go-speedtest
 
-Self-hosted speedtest in a single Go binary: it serves an embedded vanilla-JS UI
-and a native measurement API. A companion CLI (`go-speedtest-cli`) runs the same
-test from a terminal. No TLS in the binary — put it behind an edge proxy.
+Self-hosted speedtest in a single Go binary.
+
+- Embedded vanilla-JS UI plus a native measurement API.
+- Companion CLI (`go-speedtest-cli`) runs the same test from a terminal.
+- LAN and internet profiles (rate limiting, per-IP concurrency, upload caps).
+- Optional sqlite telemetry storage and a Prometheus `/metrics` endpoint.
+- No TLS in the binary; put it behind a TLS-terminating edge proxy.
 
 See [DESIGN.md](DESIGN.md) for the full methodology, API contract and package
 ownership map.
 
-## Build
+## Quick start
 
 ```
 go build ./...
+go run ./cmd/go-speedtest -listen :8080 -mode lan
 ```
 
 Binaries:
 
-- `cmd/go-speedtest` — the server (`go-speedtest`)
-- `cmd/go-speedtest-cli` — the CLI (`go-speedtest-cli`)
+- `cmd/go-speedtest`: the server (`go-speedtest`)
+- `cmd/go-speedtest-cli`: the CLI (`go-speedtest-cli`)
 
-## Run
-
-```
-go run ./cmd/go-speedtest -listen :8080 -mode lan
-```
-
-## Flags
+## Configuration
 
 Flags may also be set via environment variables with the `GOSPEEDTEST_` prefix
 (e.g. `-log-level` -> `GOSPEEDTEST_LOG_LEVEL`). A flag wins over its env var.
@@ -42,8 +41,8 @@ Flags may also be set via environment variables with the `GOSPEEDTEST_` prefix
 | `-api-token` | (none) | require Bearer token on results/stats when set |
 | `-cors` | (none) | allowed origins for API endpoints |
 | `-overhead` | `1.06` | throughput overhead compensation factor |
-| `-download-streams` | `6` | parallel download streams (3–12) |
-| `-upload-streams` | `3` | parallel upload streams (3–12) |
+| `-download-streams` | `6` | parallel download streams (3-12) |
+| `-upload-streams` | `3` | parallel upload streams (3-12) |
 | `-test-duration` | `15s` | test duration |
 | `-grace-download` | `1.5s` | download grace period (counter reset) |
 | `-grace-upload` | `3s` | upload grace period (counter reset) |
@@ -73,6 +72,19 @@ Flags may also be set via environment variables with the `GOSPEEDTEST_` prefix
 | GET  | `/healthz` `/readyz` | Probes |
 | GET  | `/metrics` | Prometheus text |
 
+## Development
+
+```
+go build ./...
+go test ./...
+```
+
+## Release
+
+`dev` is the working/default branch. CI builds and tests every push to `dev`.
+Merging a promotion PR into `main` mints the next semver tag and publishes the
+image to `ghcr.io/rake-pro/go-speedtest`.
+
 ## License
 
-MIT - see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
