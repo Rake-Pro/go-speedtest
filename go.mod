@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/rs/zerolog v1.35.1
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	modernc.org/sqlite v1.60.1
 )
 
