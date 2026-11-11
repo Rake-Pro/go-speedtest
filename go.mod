@@ -1,6 +1,6 @@
 module github.com/Rake-Pro/go-speedtest
 
-go 1.27.3
+go 1.27.4
 
 // No Multipath TCP listeners: nothing on the fleet dials MPTCP, and a listening
 // MPTCP socket was the precondition of the CVE-2026-98432 host-kernel exploit.
