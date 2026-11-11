@@ -34,6 +34,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Compute and push next version tag
@@ -65,8 +66,10 @@ jobs:
             esac
           fi
 
-          git tag "${next}" "${GITHUB_SHA}"
-          git push origin "refs/tags/${next}"
+          # The checkout keeps no credentials, so the tag is created through the API
+          # with the job token instead of git push.
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${next}" -f sha="${GITHUB_SHA}" --silent
           echo "tag=${next}" >> "$GITHUB_OUTPUT"
 
   build:
@@ -92,6 +95,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
           ref: refs/tags/${{ steps.rel.outputs.tag }}
 
       - name: Docker metadata
