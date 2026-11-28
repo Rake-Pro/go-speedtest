@@ -9,7 +9,7 @@ godebug multipathtcp=0
 require (
 	github.com/rs/zerolog v1.35.1
 	golang.org/x/net v0.63.0
-	modernc.org/sqlite v1.62.0
+	modernc.org/sqlite v1.63.0
 )
 
 require (
